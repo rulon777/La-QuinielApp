@@ -2,7 +2,9 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 import { AppHeader } from "@/components/app-header"
 import { MatchList } from "@/components/match-list"
 import { AdminPanel } from "@/components/admin-panel"
@@ -11,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { RoomData } from "@/app/actions/room"
-import { ArrowLeft, Copy, Crown, Check } from "lucide-react"
+import { ArrowLeft, Copy, Crown, Check, RotateCw } from "lucide-react"
 
 export function RoomView({
   userName,
@@ -22,7 +24,9 @@ export function RoomView({
   userId: string
   data: RoomData
 }) {
+  const router = useRouter()
   const [copied, setCopied] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const myPoints = data.leaderboard.find((r) => r.userId === userId)?.points ?? 0
   const myRank = data.leaderboard.findIndex((r) => r.userId === userId) + 1
@@ -38,16 +42,36 @@ export function RoomView({
     }
   }
 
+  const handleRefresh = () => {
+    setIsRefreshing(true)
+    router.refresh()
+    setTimeout(() => {
+      setIsRefreshing(false)
+      toast.success("Datos actualizados")
+    }, 800)
+  }
+
   return (
     <div className="min-h-svh bg-background">
       <AppHeader userName={userName} />
       <main className="mx-auto max-w-3xl px-4 py-6">
-        <Link
-          href="/"
-          className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" /> Mis ligas
-        </Link>
+        <div className="mb-4 flex items-center justify-between">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" /> Mis ligas
+          </Link>
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1 text-xs text-muted-foreground transition-all hover:bg-accent hover:text-foreground disabled:opacity-50"
+            title="Refrescar datos"
+          >
+            <RotateCw className={cn("h-3 w-3", isRefreshing && "animate-spin")} />
+            <span>Refrescar</span>
+          </button>
+        </div>
 
         <div className="mb-6 rounded-2xl border border-border bg-card p-5">
           <div className="flex items-start justify-between gap-3">
