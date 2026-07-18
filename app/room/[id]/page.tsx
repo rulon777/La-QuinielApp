@@ -15,7 +15,8 @@ export default async function RoomPage({ params }: { params: Promise<{ id: strin
   let data
   try {
     data = await getRoomData(roomId)
-  } catch {
+  } catch (error) {
+    console.error("Error loading room data:", error)
     notFound()
   }
 

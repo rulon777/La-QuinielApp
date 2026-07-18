@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { savePrediction, type MatchWithPrediction } from "@/app/actions/room"
-import { CalendarDays } from "lucide-react"
+import { CalendarDays, ChevronDown, ChevronRight } from "lucide-react"
 
 export function MatchList({
   roomId,
@@ -63,6 +63,7 @@ function MatchCard({ roomId, match }: { roomId: number; match: MatchWithPredicti
   const [home, setHome] = useState(match.myPrediction ? String(match.myPrediction.homeScore) : "")
   const [away, setAway] = useState(match.myPrediction ? String(match.myPrediction.awayScore) : "")
   const [pending, startTransition] = useTransition()
+  const [showBets, setShowBets] = useState(false)
 
   const isPastStartTime = match.startTime ? new Date() >= new Date(match.startTime) : false
   const isLocked = match.finished || isPastStartTime
@@ -129,51 +130,73 @@ function MatchCard({ roomId, match }: { roomId: number; match: MatchWithPredicti
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3">
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">
+            {match.finished ? (
+              match.myPrediction
+                ? `Tu predicción: ${match.myPrediction.homeScore} - ${match.myPrediction.awayScore}`
+                : "No participaste"
+            ) : isPastStartTime ? (
+              match.myPrediction
+                ? `Tu predicción: ${match.myPrediction.homeScore} - ${match.myPrediction.awayScore}`
+                : "No participaste"
+            ) : (
+              match.myPrediction
+                ? `Tu predicción: ${match.myPrediction.homeScore} - ${match.myPrediction.awayScore}`
+                : "Sin predicción todavía"
+            )}
+          </span>
+          <button
+            onClick={() => setShowBets(!showBets)}
+            className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-primary transition-colors hover:text-primary/80 w-fit"
+          >
+            Ver todas las predicciones {showBets ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+
         {match.finished ? (
-          <FinishedFooter match={match} />
-        ) : isPastStartTime ? (
-          <>
-            <span className="text-xs text-muted-foreground">
-              {match.myPrediction
-                ? `Tu predicción: ${match.myPrediction.homeScore} - ${match.myPrediction.awayScore}`
-                : "No participaste"}
-            </span>
-            <Badge variant="outline" className="text-muted-foreground border-muted-foreground/30 bg-muted/40 font-normal">
-              Apuestas cerradas
+          match.myPrediction ? (
+            <Badge variant={match.myPrediction.points === 4 ? "default" : match.myPrediction.points === 2 ? "secondary" : "outline"}>
+              {match.myPrediction.points > 0 ? `+${match.myPrediction.points} ${match.myPrediction.points === 1 ? "punto" : "puntos"}` : "0 puntos"}
             </Badge>
-          </>
+          ) : (
+            <Badge variant="outline" className="text-muted-foreground border-muted-foreground/30 bg-muted/40 font-normal">
+              Finalizado
+            </Badge>
+          )
+        ) : isPastStartTime ? (
+          <Badge variant="outline" className="text-muted-foreground border-muted-foreground/30 bg-muted/40 font-normal">
+            Apuestas cerradas
+          </Badge>
         ) : (
-          <>
-            <span className="text-xs text-muted-foreground">
-              {match.myPrediction
-                ? `Tu predicción: ${match.myPrediction.homeScore} - ${match.myPrediction.awayScore}`
-                : "Sin predicción todavía"}
-            </span>
-            <Button size="sm" onClick={save} disabled={pending}>
-              {pending ? "Guardando..." : match.myPrediction ? "Actualizar" : "Predecir"}
-            </Button>
-          </>
+          <Button size="sm" onClick={save} disabled={pending}>
+            {pending ? "Guardando..." : match.myPrediction ? "Actualizar" : "Predecir"}
+          </Button>
         )}
       </div>
-    </div>
-  )
-}
 
-function FinishedFooter({ match }: { match: MatchWithPrediction }) {
-  if (!match.myPrediction) {
-    return <span className="text-xs text-muted-foreground">Finalizado · No predijiste este partido</span>
-  }
-  const pts = match.myPrediction.points
-  const variant = pts === 4 ? "default" : pts === 2 ? "secondary" : "outline"
-  return (
-    <>
-      <span className="text-xs text-muted-foreground">
-        Tu predicción: {match.myPrediction.homeScore} - {match.myPrediction.awayScore}
-      </span>
-      <Badge variant={variant}>
-        {pts > 0 ? `+${pts} ${pts === 1 ? "punto" : "puntos"}` : "0 puntos"}
-      </Badge>
-    </>
+      {showBets && (
+        <div className="mt-3 border-t border-border pt-3 animate-in fade-in slide-in-from-top-1 duration-200">
+          <p className="text-[11px] font-bold text-muted-foreground mb-2 uppercase tracking-wider">Pronósticos de la sala:</p>
+          {match.allPredictions.length === 0 ? (
+            <p className="text-xs text-muted-foreground italic">Nadie ha apostado todavía.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {match.allPredictions.map((p, idx) => (
+                <div key={idx} className="flex items-center justify-between gap-1.5 rounded-lg bg-muted/50 px-2.5 py-1.5 text-xs border border-border/20">
+                  <span className="truncate font-medium text-muted-foreground max-w-[120px]" title={p.userName}>
+                    {p.userName}
+                  </span>
+                  <span className="font-bold font-mono shrink-0">
+                    {p.homeScore} - {p.awayScore}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 

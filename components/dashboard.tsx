@@ -103,13 +103,11 @@ function CreateRoomDialog({ onCreated }: { onCreated: (roomId: number) => void }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="lg" className="h-auto flex-col items-start gap-1 py-4">
-          <span className="flex items-center gap-2 text-base font-semibold">
-            <Plus className="h-5 w-5" /> Crear sala
-          </span>
-          <span className="text-xs font-normal opacity-90">Serás el administrador</span>
-        </Button>
+      <DialogTrigger render={<Button size="lg" className="h-auto flex-col items-start gap-1 py-4" />}>
+        <span className="flex items-center gap-2 text-base font-semibold">
+          <Plus className="h-5 w-5" /> Crear sala
+        </span>
+        <span className="text-xs font-normal opacity-90">Serás el administrador</span>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -160,13 +158,11 @@ function JoinRoomDialog({ onJoined }: { onJoined: (roomId: number) => void }) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="lg" variant="secondary" className="h-auto flex-col items-start gap-1 py-4">
-          <span className="flex items-center gap-2 text-base font-semibold">
-            <LogIn className="h-5 w-5" /> Unirse con código
-          </span>
-          <span className="text-xs font-normal opacity-90">Entra en la sala de un amigo</span>
-        </Button>
+      <DialogTrigger render={<Button size="lg" variant="secondary" className="h-auto flex-col items-start gap-1 py-4" />}>
+        <span className="flex items-center gap-2 text-base font-semibold">
+          <LogIn className="h-5 w-5" /> Unirse con código
+        </span>
+        <span className="text-xs font-normal opacity-90">Entra en la sala de un amigo</span>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>

@@ -37,6 +37,7 @@ export type MatchWithPrediction = {
   finished: boolean
   startTime: string | null
   myPrediction: { homeScore: number; awayScore: number; points: number } | null
+  allPredictions: { userName: string; homeScore: number; awayScore: number; points: number }[]
 }
 
 export type LeaderboardRow = {
@@ -73,6 +74,22 @@ export async function getRoomData(roomId: number): Promise<RoomData> {
 
   const predByMatch = new Map(myPredictions.map((p) => [p.matchId, p]))
 
+  // Clasificación: suma de puntos por miembro.
+  const members = await db.select().from(roomMember).where(eq(roomMember.roomId, roomId))
+  const allPredictions = await db.select().from(prediction).where(eq(prediction.roomId, roomId))
+
+  const predsByMatchId = new Map<number, { userName: string; homeScore: number; awayScore: number; points: number }[]>()
+  for (const p of allPredictions) {
+    const list = predsByMatchId.get(p.matchId) ?? []
+    list.push({
+      userName: p.userName,
+      homeScore: p.homeScore,
+      awayScore: p.awayScore,
+      points: p.points,
+    })
+    predsByMatchId.set(p.matchId, list)
+  }
+
   const matchesWithPred: MatchWithPrediction[] = matches.map((m) => {
     const p = predByMatch.get(m.id)
     return {
@@ -85,12 +102,9 @@ export async function getRoomData(roomId: number): Promise<RoomData> {
       finished: m.finished,
       startTime: m.startTime ? m.startTime.toISOString() : null,
       myPrediction: p ? { homeScore: p.homeScore, awayScore: p.awayScore, points: p.points } : null,
+      allPredictions: predsByMatchId.get(m.id) ?? [],
     }
   })
-
-  // Clasificación: suma de puntos por miembro.
-  const members = await db.select().from(roomMember).where(eq(roomMember.roomId, roomId))
-  const allPredictions = await db.select().from(prediction).where(eq(prediction.roomId, roomId))
 
   const pointsByUser = new Map<string, number>()
   for (const p of allPredictions) {

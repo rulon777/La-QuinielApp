@@ -45,7 +45,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="es" className={`bg-background ${geistSans.variable} ${geistMono.variable}`}>
+    <html lang="es" className={`bg-background ${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <body className="font-sans antialiased">
         {children}
         <Toaster position="top-center" />
