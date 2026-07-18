@@ -57,7 +57,7 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
             <Trophy className="h-7 w-7" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground text-balance">
-            {isSignUp ? "Crea tu cuenta" : "La Porra"}
+            {isSignUp ? "Crea tu cuenta" : "La QuinielApp"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground text-pretty">
             {isSignUp

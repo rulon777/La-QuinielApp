@@ -22,7 +22,7 @@ export function AppHeader({ userName }: { userName?: string }) {
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Trophy className="h-4 w-4" />
           </span>
-          <span className="text-base font-bold tracking-tight text-foreground">La Porra</span>
+          <span className="text-base font-bold tracking-tight text-foreground">La QuinielApp</span>
         </Link>
         <div className="flex items-center gap-3">
           {userName && <span className="hidden text-sm text-muted-foreground sm:inline">Hola, {userName}</span>}

@@ -120,7 +120,7 @@ function CreateRoomDialog({ onCreated }: { onCreated: (roomId: number) => void }
             id="room-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Ej. La porra del grupo"
+            placeholder="Ej. La quiniela del grupo"
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.nativeEvent.isComposing && e.keyCode !== 229) submit()
             }}
