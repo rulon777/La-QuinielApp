@@ -89,7 +89,7 @@ export function RoomView({
           </TabsList>
 
           <TabsContent value="matches" className="mt-4">
-            <MatchList roomId={data.id} matches={data.matches} isAdmin={data.isAdmin} />
+            <MatchList roomId={data.id} matches={data.matches} isAdmin={data.isAdmin} userId={userId} />
           </TabsContent>
 
           <TabsContent value="leaderboard" className="mt-4">

@@ -13,7 +13,7 @@ import { Trophy } from "lucide-react"
 export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   const router = useRouter()
   const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
+  const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -25,9 +25,18 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
     setError(null)
     setLoading(true)
 
+    const cleanUsername = username.trim().toLowerCase()
+    if (cleanUsername.length < 3) {
+      setError("El usuario debe tener al menos 3 caracteres.")
+      setLoading(false)
+      return
+    }
+
+    const virtualEmail = `${cleanUsername}@porra.local`
+
     const { error } = isSignUp
-      ? await authClient.signUp.email({ email, password, name })
-      : await authClient.signIn.email({ email, password })
+      ? await authClient.signUp.email({ email: virtualEmail, password, name })
+      : await authClient.signIn.email({ email: virtualEmail, password })
 
     setLoading(false)
 
@@ -73,15 +82,15 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
               </div>
             )}
             <div className="flex flex-col gap-2">
-              <Label htmlFor="email">Correo electrónico</Label>
+              <Label htmlFor="username">Usuario</Label>
               <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value.replace(/\s+/g, "").toLowerCase())}
                 required
-                placeholder="tucorreo@ejemplo.com"
-                autoComplete="email"
+                placeholder="Ej. dani7"
+                autoComplete="username"
               />
             </div>
             <div className="flex flex-col gap-2">
@@ -126,9 +135,9 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
 
 function traducirError(message: string): string {
   const m = message.toLowerCase()
-  if (m.includes("invalid") && m.includes("password")) return "Correo o contraseña incorrectos."
-  if (m.includes("invalid email")) return "El correo no es válido."
-  if (m.includes("already") || m.includes("exist")) return "Ya existe una cuenta con ese correo."
+  if (m.includes("invalid") && m.includes("password")) return "Usuario o contraseña incorrectos."
+  if (m.includes("invalid email") || m.includes("invalid credential")) return "Usuario o contraseña incorrectos."
+  if (m.includes("already") || m.includes("exist")) return "Ya existe ese usuario."
   if (m.includes("password")) return "La contraseña debe tener al menos 8 caracteres."
   return message || "Algo salió mal. Inténtalo de nuevo."
 }

@@ -50,7 +50,8 @@ function AddMatchForm({ roomId, defaultWeek }: { roomId: number; defaultWeek: nu
       return
     }
     startTransition(async () => {
-      const res = await addMatch(roomId, { week: w, homeTeam: home, awayTeam: away, startTime })
+      const isoStartTime = new Date(startTime).toISOString()
+      const res = await addMatch(roomId, { week: w, homeTeam: home, awayTeam: away, startTime: isoStartTime })
       if (!res.ok) {
         toast.error(res.error ?? "No se pudo añadir")
         return

@@ -12,10 +12,12 @@ export function MatchList({
   roomId,
   matches,
   isAdmin,
+  userId,
 }: {
   roomId: number
   matches: MatchWithPrediction[]
   isAdmin: boolean
+  userId: string
 }) {
   const byWeek = useMemo(() => {
     const map = new Map<number, MatchWithPrediction[]>()
@@ -50,7 +52,7 @@ export function MatchList({
           </h2>
           <div className="flex flex-col gap-3">
             {weekMatches.map((m) => (
-              <MatchCard key={m.id} roomId={roomId} match={m} />
+              <MatchCard key={m.id} roomId={roomId} match={m} userId={userId} />
             ))}
           </div>
         </section>
@@ -59,7 +61,7 @@ export function MatchList({
   )
 }
 
-function MatchCard({ roomId, match }: { roomId: number; match: MatchWithPrediction }) {
+function MatchCard({ roomId, match, userId }: { roomId: number; match: MatchWithPrediction; userId: string }) {
   const [home, setHome] = useState(match.myPrediction ? String(match.myPrediction.homeScore) : "")
   const [away, setAway] = useState(match.myPrediction ? String(match.myPrediction.awayScore) : "")
   const [pending, startTransition] = useTransition()
@@ -182,16 +184,24 @@ function MatchCard({ roomId, match }: { roomId: number; match: MatchWithPredicti
             <p className="text-xs text-muted-foreground italic">Nadie ha apostado todavía.</p>
           ) : (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {match.allPredictions.map((p, idx) => (
-                <div key={idx} className="flex items-center justify-between gap-1.5 rounded-lg bg-muted/50 px-2.5 py-1.5 text-xs border border-border/20">
-                  <span className="truncate font-medium text-muted-foreground max-w-[120px]" title={p.userName}>
-                    {p.userName}
-                  </span>
-                  <span className="font-bold font-mono shrink-0">
-                    {p.homeScore} - {p.awayScore}
-                  </span>
-                </div>
-              ))}
+              {match.allPredictions.map((p, idx) => {
+                const isOwn = p.userId === userId
+                const showDetails = isOwn || isLocked
+                return (
+                  <div key={idx} className="flex items-center justify-between gap-1.5 rounded-lg bg-muted/50 px-2.5 py-1.5 text-xs border border-border/20">
+                    <span className="truncate font-medium text-muted-foreground max-w-[120px]" title={p.userName}>
+                      {p.userName} {isOwn && <span className="text-[10px] text-primary">(Tú)</span>}
+                    </span>
+                    <span className="font-bold font-mono shrink-0">
+                      {showDetails ? (
+                        `${p.homeScore} - ${p.awayScore}`
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground font-normal" title="Disponible al comenzar el partido">🔒 Oculto</span>
+                      )}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
