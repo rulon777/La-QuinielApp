@@ -48,7 +48,14 @@ export function Leaderboard({
                 )}
               </div>
             </div>
-            <span className="shrink-0 text-lg font-bold text-primary">{row.points}</span>
+            <div className="shrink-0 flex items-center gap-3 text-xs text-muted-foreground">
+              <span>
+                {row.clavadas} {row.clavadas === 1 ? "Clavada" : "Clavadas"}
+              </span>
+              <span className="text-base font-bold text-primary">
+                {row.points} {row.points === 1 ? "pt" : "pts"}
+              </span>
+            </div>
           </li>
         )
       })}

@@ -44,6 +44,7 @@ export type LeaderboardRow = {
   userId: string
   userName: string
   points: number
+  clavadas: number
   isAdmin: boolean
 }
 
@@ -108,8 +109,12 @@ export async function getRoomData(roomId: number): Promise<RoomData> {
   })
 
   const pointsByUser = new Map<string, number>()
+  const clavadasByUser = new Map<string, number>()
   for (const p of allPredictions) {
     pointsByUser.set(p.userId, (pointsByUser.get(p.userId) ?? 0) + p.points)
+    if (p.points === 4) {
+      clavadasByUser.set(p.userId, (clavadasByUser.get(p.userId) ?? 0) + 1)
+    }
   }
 
   const leaderboard: LeaderboardRow[] = members
@@ -117,9 +122,10 @@ export async function getRoomData(roomId: number): Promise<RoomData> {
       userId: m.userId,
       userName: m.userName,
       points: pointsByUser.get(m.userId) ?? 0,
+      clavadas: clavadasByUser.get(m.userId) ?? 0,
       isAdmin: m.userId === r.adminId,
     }))
-    .sort((a, b) => b.points - a.points || a.userName.localeCompare(b.userName))
+    .sort((a, b) => b.points - a.points || b.clavadas - a.clavadas || a.userName.localeCompare(b.userName))
 
   const weeks = Array.from(new Set(matches.map((m) => m.week))).sort((a, b) => b - a)
 

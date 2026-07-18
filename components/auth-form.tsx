@@ -62,7 +62,7 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
           <p className="mt-1 text-sm text-muted-foreground text-pretty">
             {isSignUp
               ? "Regístrate para empezar a predecir con tus amigos"
-              : "Inicia sesión para entrar en tus salas"}
+              : "Inicia sesión para entrar en tus ligas"}
           </p>
         </div>
 

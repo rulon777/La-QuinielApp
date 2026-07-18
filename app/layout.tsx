@@ -10,7 +10,7 @@ const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono'
 export const metadata: Metadata = {
   title: 'La QuinielApp — Predice resultados con tus amigos',
   description:
-    'Crea salas privadas, predice el marcador exacto de los partidos de la semana y compite en la clasificación con tus amigos.',
+    'Crea ligas privadas, predice el marcador exacto de los partidos de la semana y compite en la clasificación con tus amigos.',
   generator: 'v0.app',
   icons: {
     icon: [

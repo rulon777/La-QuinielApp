@@ -46,7 +46,7 @@ export function RoomView({
           href="/"
           className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ArrowLeft className="h-4 w-4" /> Mis salas
+          <ArrowLeft className="h-4 w-4" /> Mis ligas
         </Link>
 
         <div className="mb-6 rounded-2xl border border-border bg-card p-5">

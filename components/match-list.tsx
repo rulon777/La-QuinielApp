@@ -179,7 +179,7 @@ function MatchCard({ roomId, match, userId }: { roomId: number; match: MatchWith
 
       {showBets && (
         <div className="mt-3 border-t border-border pt-3 animate-in fade-in slide-in-from-top-1 duration-200">
-          <p className="text-[11px] font-bold text-muted-foreground mb-2 uppercase tracking-wider">Pronósticos de la sala:</p>
+          <p className="text-[11px] font-bold text-muted-foreground mb-2 uppercase tracking-wider">Pronósticos de la liga:</p>
           {match.allPredictions.length === 0 ? (
             <p className="text-xs text-muted-foreground italic">Nadie ha apostado todavía.</p>
           ) : (
