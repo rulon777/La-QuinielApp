@@ -1,0 +1,203 @@
+"use client"
+
+import { useMemo, useState, useTransition } from "react"
+import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { savePrediction, type MatchWithPrediction } from "@/app/actions/room"
+import { CalendarDays } from "lucide-react"
+
+export function MatchList({
+  roomId,
+  matches,
+  isAdmin,
+}: {
+  roomId: number
+  matches: MatchWithPrediction[]
+  isAdmin: boolean
+}) {
+  const byWeek = useMemo(() => {
+    const map = new Map<number, MatchWithPrediction[]>()
+    for (const m of matches) {
+      const arr = map.get(m.week) ?? []
+      arr.push(m)
+      map.set(m.week, arr)
+    }
+    return Array.from(map.entries()).sort((a, b) => b[0] - a[0])
+  }, [matches])
+
+  if (matches.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border py-16 text-center">
+        <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+          <CalendarDays className="h-6 w-6" />
+        </span>
+        <p className="text-sm font-medium text-foreground">Todavía no hay partidos</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {isAdmin ? "Añade los partidos de la semana en la pestaña Admin." : "El admin aún no ha añadido partidos."}
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      {byWeek.map(([week, weekMatches]) => (
+        <section key={week}>
+          <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+            <CalendarDays className="h-4 w-4" /> Jornada {week}
+          </h2>
+          <div className="flex flex-col gap-3">
+            {weekMatches.map((m) => (
+              <MatchCard key={m.id} roomId={roomId} match={m} />
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  )
+}
+
+function MatchCard({ roomId, match }: { roomId: number; match: MatchWithPrediction }) {
+  const [home, setHome] = useState(match.myPrediction ? String(match.myPrediction.homeScore) : "")
+  const [away, setAway] = useState(match.myPrediction ? String(match.myPrediction.awayScore) : "")
+  const [pending, startTransition] = useTransition()
+
+  const isPastStartTime = match.startTime ? new Date() >= new Date(match.startTime) : false
+  const isLocked = match.finished || isPastStartTime
+
+  const save = () => {
+    if (isLocked) {
+      toast.error("Las apuestas están cerradas para este partido.")
+      return
+    }
+    const h = Number(home)
+    const a = Number(away)
+    if (home === "" || away === "" || !Number.isInteger(h) || !Number.isInteger(a) || h < 0 || a < 0) {
+      toast.error("Introduce un marcador válido")
+      return
+    }
+    startTransition(async () => {
+      const res = await savePrediction(roomId, match.id, h, a)
+      if (!res.ok) {
+        toast.error(res.error ?? "No se pudo guardar")
+        return
+      }
+      toast.success("Predicción guardada")
+    })
+  }
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4">
+      {match.startTime && (
+        <div className="mb-3 flex justify-center">
+          <span className="text-[11px] font-semibold text-muted-foreground/80 uppercase tracking-wider bg-secondary/40 px-2.5 py-0.5 rounded-full">
+            {new Date(match.startTime).toLocaleString("es-ES", {
+              weekday: "short",
+              day: "numeric",
+              month: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-1 items-center justify-end gap-2 text-right">
+          <span className="text-sm font-semibold text-card-foreground text-balance">{match.homeTeam}</span>
+        </div>
+
+        {match.finished ? (
+          <div className="flex shrink-0 items-center gap-1 rounded-lg bg-muted px-3 py-1.5">
+            <span className="text-lg font-bold text-foreground">{match.homeScore}</span>
+            <span className="text-muted-foreground">-</span>
+            <span className="text-lg font-bold text-foreground">{match.awayScore}</span>
+          </div>
+        ) : (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <ScoreInput value={home} onChange={setHome} label={`Goles ${match.homeTeam}`} disabled={isLocked} />
+            <span className="text-muted-foreground">-</span>
+            <ScoreInput value={away} onChange={setAway} label={`Goles ${match.awayTeam}`} disabled={isLocked} />
+          </div>
+        )}
+
+        <div className="flex flex-1 items-center gap-2">
+          <span className="text-sm font-semibold text-card-foreground text-balance">{match.awayTeam}</span>
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-2 border-t border-border pt-3">
+        {match.finished ? (
+          <FinishedFooter match={match} />
+        ) : isPastStartTime ? (
+          <>
+            <span className="text-xs text-muted-foreground">
+              {match.myPrediction
+                ? `Tu predicción: ${match.myPrediction.homeScore} - ${match.myPrediction.awayScore}`
+                : "No participaste"}
+            </span>
+            <Badge variant="outline" className="text-muted-foreground border-muted-foreground/30 bg-muted/40 font-normal">
+              Apuestas cerradas
+            </Badge>
+          </>
+        ) : (
+          <>
+            <span className="text-xs text-muted-foreground">
+              {match.myPrediction
+                ? `Tu predicción: ${match.myPrediction.homeScore} - ${match.myPrediction.awayScore}`
+                : "Sin predicción todavía"}
+            </span>
+            <Button size="sm" onClick={save} disabled={pending}>
+              {pending ? "Guardando..." : match.myPrediction ? "Actualizar" : "Predecir"}
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function FinishedFooter({ match }: { match: MatchWithPrediction }) {
+  if (!match.myPrediction) {
+    return <span className="text-xs text-muted-foreground">Finalizado · No predijiste este partido</span>
+  }
+  const pts = match.myPrediction.points
+  const variant = pts === 4 ? "default" : pts === 2 ? "secondary" : "outline"
+  return (
+    <>
+      <span className="text-xs text-muted-foreground">
+        Tu predicción: {match.myPrediction.homeScore} - {match.myPrediction.awayScore}
+      </span>
+      <Badge variant={variant}>
+        {pts > 0 ? `+${pts} ${pts === 1 ? "punto" : "puntos"}` : "0 puntos"}
+      </Badge>
+    </>
+  )
+}
+
+function ScoreInput({
+  value,
+  onChange,
+  label,
+  disabled = false,
+}: {
+  value: string
+  onChange: (v: string) => void
+  label: string
+  disabled?: boolean
+}) {
+  return (
+    <Input
+      inputMode="numeric"
+      pattern="[0-9]*"
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value.replace(/[^0-9]/g, "").slice(0, 2))}
+      className="h-11 w-11 text-center text-lg font-bold"
+      placeholder="0"
+      disabled={disabled}
+    />
+  )
+}

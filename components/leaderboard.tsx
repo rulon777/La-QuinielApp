@@ -1,0 +1,57 @@
+"use client"
+
+import { cn } from "@/lib/utils"
+import { Badge } from "@/components/ui/badge"
+import type { LeaderboardRow } from "@/app/actions/room"
+import { Crown, Medal } from "lucide-react"
+
+export function Leaderboard({
+  rows,
+  currentUserId,
+}: {
+  rows: LeaderboardRow[]
+  currentUserId: string
+}) {
+  if (rows.length === 0) {
+    return (
+      <p className="rounded-2xl border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
+        Aún no hay jugadores en la clasificación.
+      </p>
+    )
+  }
+
+  const medalColor = ["text-amber-500", "text-zinc-400", "text-amber-700"]
+
+  return (
+    <ol className="flex flex-col gap-2">
+      {rows.map((row, i) => {
+        const isMe = row.userId === currentUserId
+        return (
+          <li
+            key={row.userId}
+            className={cn(
+              "flex items-center gap-3 rounded-2xl border border-border bg-card p-3",
+              isMe && "border-primary/60 ring-1 ring-primary/30",
+            )}
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-bold text-foreground">
+              {i < 3 ? <Medal className={cn("h-4 w-4", medalColor[i])} /> : i + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="truncate text-sm font-semibold text-card-foreground">{row.userName}</span>
+                {row.isAdmin && <Crown className="h-3.5 w-3.5 shrink-0 text-amber-500" />}
+                {isMe && (
+                  <Badge variant="outline" className="ml-1 shrink-0">
+                    Tú
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <span className="shrink-0 text-lg font-bold text-primary">{row.points}</span>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
