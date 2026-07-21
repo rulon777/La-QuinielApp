@@ -26,7 +26,23 @@ export function MatchList({
       arr.push(m)
       map.set(m.week, arr)
     }
-    return Array.from(map.entries()).sort((a, b) => b[0] - a[0])
+
+    const now = new Date().getTime()
+    const fourDaysInMs = 4 * 24 * 60 * 60 * 1000
+
+    const filtered = Array.from(map.entries()).filter(([_, weekMatches]) => {
+      const startTimes = weekMatches
+        .map((m) => (m.startTime ? new Date(m.startTime).getTime() : null))
+        .filter((t): t is number => t !== null)
+
+      if (startTimes.length > 0) {
+        const earliestStart = Math.min(...startTimes)
+        return (earliestStart - now) <= fourDaysInMs
+      }
+      return true
+    })
+
+    return filtered.sort((a, b) => b[0] - a[0])
   }, [matches])
 
   if (matches.length === 0) {

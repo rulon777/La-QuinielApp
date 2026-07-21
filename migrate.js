@@ -16,6 +16,18 @@ async function main() {
   try {
     console.log("Verificando y agregando columna 'startTime' a la tabla 'match'...");
     await client.query('ALTER TABLE "match" ADD COLUMN IF NOT EXISTS "startTime" timestamp;');
+    console.log("Agregando columna 'externalId' a la tabla 'match'...");
+    await client.query('ALTER TABLE "match" ADD COLUMN IF NOT EXISTS "externalId" text UNIQUE;');
+    console.log("Agregando columna 'matchday' a la tabla 'match'...");
+    await client.query('ALTER TABLE "match" ADD COLUMN IF NOT EXISTS "matchday" integer;');
+    console.log("Agregando columna 'status' a la tabla 'match'...");
+    await client.query('ALTER TABLE "match" ADD COLUMN IF NOT EXISTS "status" text;');
+    console.log("Agregando columna 'scoreHome' a la tabla 'match'...");
+    await client.query('ALTER TABLE "match" ADD COLUMN IF NOT EXISTS "scoreHome" integer;');
+    console.log("Agregando columna 'scoreAway' a la tabla 'match'...");
+    await client.query('ALTER TABLE "match" ADD COLUMN IF NOT EXISTS "scoreAway" integer;');
+    console.log("Haciendo 'roomId' opcional en la tabla 'match'...");
+    await client.query('ALTER TABLE "match" ALTER COLUMN "roomId" DROP NOT NULL;');
     console.log("¡Migración completada con éxito!");
   } catch (error) {
     console.error("Error durante la migración:", error);

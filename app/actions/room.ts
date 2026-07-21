@@ -296,6 +296,26 @@ export async function savePrediction(
     .where(and(eq(match.id, matchId), eq(match.roomId, roomId)))
     .limit(1)
   if (!m) return { ok: false, error: "El partido no existe." }
+
+  // Enforce 4-day visibility rule for predictions
+  const weekMatches = await db
+    .select({ startTime: match.startTime })
+    .from(match)
+    .where(eq(match.week, m.week))
+  
+  const startTimes = weekMatches
+    .map((wm) => (wm.startTime ? new Date(wm.startTime).getTime() : null))
+    .filter((t): t is number => t !== null)
+
+  if (startTimes.length > 0) {
+    const earliestStart = Math.min(...startTimes)
+    const now = new Date()
+    const fourDaysInMs = 4 * 24 * 60 * 60 * 1000
+    if (earliestStart - now.getTime() > fourDaysInMs) {
+      return { ok: false, error: "Esta jornada aún no está abierta para pronósticos." }
+    }
+  }
+
   if (m.finished) return { ok: false, error: "Este partido ya tiene resultado, no puedes predecir." }
 
   if (m.startTime && new Date() >= new Date(m.startTime)) {
@@ -305,7 +325,13 @@ export async function savePrediction(
   const [existing] = await db
     .select()
     .from(prediction)
-    .where(and(eq(prediction.matchId, matchId), eq(prediction.userId, user.id)))
+    .where(
+      and(
+        eq(prediction.matchId, matchId),
+        eq(prediction.roomId, roomId),
+        eq(prediction.userId, user.id),
+      ),
+    )
     .limit(1)
 
   if (existing) {

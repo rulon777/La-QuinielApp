@@ -84,6 +84,11 @@ export const match = pgTable("match", {
   awayScore: integer("awayScore"),
   finished: boolean("finished").notNull().default(false),
   startTime: timestamp("startTime"),
+  externalId: text("externalId").unique(),
+  matchday: integer("matchday"),
+  status: text("status"),
+  scoreHome: integer("scoreHome"),
+  scoreAway: integer("scoreAway"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 })
 
