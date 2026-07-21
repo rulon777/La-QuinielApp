@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { room, match, prediction } from "@/lib/db/schema"
 import { calcularPuntos } from "@/lib/scoring"
-import { eq } from "drizzle-orm"
+import { eq, inArray } from "drizzle-orm"
 import { revalidatePath } from "next/cache"
 
 function getNormalizedTeamName(name: string): string {
@@ -63,19 +63,26 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: false, error: "Invalid API response structure" }, { status: 500 })
     }
 
-    // Get all rooms in the database
+    // 1. Bulk read: get all rooms and all existing matches
     const allRooms = await db.select().from(room)
+    const allDbMatches = await db.select().from(match)
 
-    let totalInserted = 0
-    let totalUpdated = 0
+    // 2. Hash map indexing: key = `${roomId}_${normalizedHomeTeam}_${normalizedAwayTeam}_${week}`
+    const matchesMap = new Map<string, typeof allDbMatches[0]>()
+    for (const m of allDbMatches) {
+      const key = `${m.roomId}_${getNormalizedTeamName(m.homeTeam)}_${getNormalizedTeamName(m.awayTeam)}_${m.week}`
+      matchesMap.set(key, m)
+    }
 
+    const matchesToInsert: (typeof match.$inferInsert)[] = []
+    const matchesToUpdatePromises: any[] = []
+    
+    // Track matches that transitioned to finished during this sync to recalculate prediction points in batch
+    const finishedMatchIds: number[] = []
+    const finishedMatchScores = new Map<number, { homeScore: number; awayScore: number }>()
+
+    // 3. Process matches in memory
     for (const currentRoom of allRooms) {
-      // Get all existing matches in this room
-      const dbMatches = await db
-        .select()
-        .from(match)
-        .where(eq(match.roomId, currentRoom.id))
-
       for (const apiMatch of data.matches) {
         const apiHomeClean = getNormalizedTeamName(apiMatch.homeTeam.name || apiMatch.homeTeam.shortName || "")
         const apiAwayClean = getNormalizedTeamName(apiMatch.awayTeam.name || apiMatch.awayTeam.shortName || "")
@@ -86,77 +93,109 @@ export async function GET(request: Request) {
         const scoreAway = apiMatch.score?.fullTime?.away ?? null
         const finished = status === "FINISHED"
 
-        // Search for existing match in this room with matching teams and matchday/week
-        const existing = dbMatches.find((m) => {
-          const dbHomeClean = getNormalizedTeamName(m.homeTeam)
-          const dbAwayClean = getNormalizedTeamName(m.awayTeam)
-          return dbHomeClean === apiHomeClean && dbAwayClean === apiAwayClean && m.week === matchday
-        })
+        const lookupKey = `${currentRoom.id}_${apiHomeClean}_${apiAwayClean}_${matchday}`
+        const existing = matchesMap.get(lookupKey)
 
         if (existing) {
-          const isNewlyFinished = finished && !existing.finished
+          const existingStartTime = existing.startTime ? new Date(existing.startTime) : null
+          const startTimeChanged = startTime && existingStartTime
+            ? startTime.getTime() !== existingStartTime.getTime()
+            : (startTime || existingStartTime ? true : false)
 
-          await db
-            .update(match)
-            .set({
-              homeScore: scoreHome,
-              awayScore: scoreAway,
-              finished,
-              startTime,
-              externalId: apiMatch.id.toString(),
-              matchday,
-              status,
-              scoreHome,
-              scoreAway,
-            })
-            .where(eq(match.id, existing.id))
+          // Only trigger updates if something has actually changed
+          const needsUpdate =
+            existing.homeScore !== scoreHome ||
+            existing.awayScore !== scoreAway ||
+            existing.finished !== finished ||
+            existing.status !== status ||
+            startTimeChanged ||
+            existing.externalId !== apiMatch.id.toString() ||
+            existing.matchday !== matchday
 
-          totalUpdated++
+          if (needsUpdate) {
+            const isNewlyFinished = finished && !existing.finished
 
-          // Recalculate prediction points if the match has transitioned to finished
-          if (isNewlyFinished && scoreHome !== null && scoreAway !== null) {
-            const preds = await db.select().from(prediction).where(eq(prediction.matchId, existing.id))
-            for (const p of preds) {
-              const points = calcularPuntos(p.homeScore, p.awayScore, scoreHome, scoreAway)
-              if (p.points !== points) {
-                await db.update(prediction).set({ points }).where(eq(prediction.id, p.id))
-              }
+            matchesToUpdatePromises.push(
+              db
+                .update(match)
+                .set({
+                  homeScore: scoreHome,
+                  awayScore: scoreAway,
+                  finished,
+                  startTime,
+                  externalId: apiMatch.id.toString(),
+                  matchday,
+                  status,
+                  scoreHome,
+                  scoreAway,
+                })
+                .where(eq(match.id, existing.id))
+            )
+
+            if (isNewlyFinished && scoreHome !== null && scoreAway !== null) {
+              finishedMatchIds.push(existing.id)
+              finishedMatchScores.set(existing.id, { homeScore: scoreHome, awayScore: scoreAway })
             }
           }
         } else {
-          // Insert new match for this room
-          const [inserted] = await db
-            .insert(match)
-            .values({
-              roomId: currentRoom.id,
-              week: matchday,
-              homeTeam: apiMatch.homeTeam.name || apiMatch.homeTeam.shortName || "",
-              awayTeam: apiMatch.awayTeam.name || apiMatch.awayTeam.shortName || "",
-              homeScore: scoreHome,
-              awayScore: scoreAway,
-              finished,
-              startTime,
-              externalId: apiMatch.id.toString(),
-              matchday,
-              status,
-              scoreHome,
-              scoreAway,
-            })
-            .returning()
+          // Push new match for bulk insert
+          matchesToInsert.push({
+            roomId: currentRoom.id,
+            week: matchday,
+            homeTeam: apiMatch.homeTeam.name || apiMatch.homeTeam.shortName || "",
+            awayTeam: apiMatch.awayTeam.name || apiMatch.awayTeam.shortName || "",
+            homeScore: scoreHome,
+            awayScore: scoreAway,
+            finished,
+            startTime,
+            externalId: apiMatch.id.toString(),
+            matchday,
+            status,
+            scoreHome,
+            scoreAway,
+          })
+        }
+      }
+    }
 
-          totalInserted++
+    // 4. Batch DB insertions (chunks of 100)
+    let totalInserted = 0
+    if (matchesToInsert.length > 0) {
+      const chunkSize = 100
+      for (let i = 0; i < matchesToInsert.length; i += chunkSize) {
+        const chunk = matchesToInsert.slice(i, i + chunkSize)
+        await db.insert(match).values(chunk)
+      }
+      totalInserted = matchesToInsert.length
+    }
 
-          // Recalculate prediction points just in case the newly inserted match is already finished
-          if (inserted && finished && scoreHome !== null && scoreAway !== null) {
-            const preds = await db.select().from(prediction).where(eq(prediction.matchId, inserted.id))
-            for (const p of preds) {
-              const points = calcularPuntos(p.homeScore, p.awayScore, scoreHome, scoreAway)
-              if (p.points !== points) {
-                await db.update(prediction).set({ points }).where(eq(prediction.id, p.id))
-              }
-            }
+    // 5. Batch DB updates in parallel
+    if (matchesToUpdatePromises.length > 0) {
+      await Promise.all(matchesToUpdatePromises)
+    }
+
+    // 6. Batch predictions recalculation
+    if (finishedMatchIds.length > 0) {
+      const preds = await db
+        .select()
+        .from(prediction)
+        .where(inArray(prediction.matchId, finishedMatchIds))
+
+      const predUpdatePromises: any[] = []
+      for (const p of preds) {
+        const scoreInfo = finishedMatchScores.get(p.matchId)
+        if (scoreInfo) {
+          const points = calcularPuntos(p.homeScore, p.awayScore, scoreInfo.homeScore, scoreInfo.awayScore)
+          if (p.points !== points) {
+            predUpdatePromises.push(
+              db.update(prediction).set({ points }).where(eq(prediction.id, p.id))
+            )
           }
         }
+      }
+
+      if (predUpdatePromises.length > 0) {
+        await Promise.all(predUpdatePromises)
       }
     }
 
@@ -166,7 +205,8 @@ export async function GET(request: Request) {
       ok: true,
       roomsSynced: allRooms.length,
       inserted: totalInserted,
-      updated: totalUpdated,
+      updated: matchesToUpdatePromises.length,
+      predictionsRecalculated: finishedMatchIds.length,
     })
   } catch (error: any) {
     console.error("Cron sync matches error:", error)
