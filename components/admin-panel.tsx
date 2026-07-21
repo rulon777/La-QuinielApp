@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { addMatch, deleteMatch, setMatchResult, type MatchWithPrediction } from "@/app/actions/room"
-import { Plus, Trash2, Flag } from "lucide-react"
+import { Plus, Trash2, Flag, CalendarDays, ChevronDown, ChevronRight } from "lucide-react"
 
 export function AdminPanel({
   roomId,
@@ -117,7 +117,7 @@ function ManageMatches({ roomId, matches }: { roomId: number; matches: MatchWith
       arr.push(m)
       map.set(m.week, arr)
     }
-    return Array.from(map.entries()).sort((a, b) => b[0] - a[0])
+    return Array.from(map.entries()).sort((a, b) => a[0] - b[0])
   }, [matches])
 
   if (matches.length === 0) {
@@ -133,17 +133,52 @@ function ManageMatches({ roomId, matches }: { roomId: number; matches: MatchWith
       <h2 className="mb-3 text-base font-semibold text-foreground">Resultados</h2>
       <div className="flex flex-col gap-6">
         {byWeek.map(([week, weekMatches]) => (
-          <div key={week}>
-            <p className="mb-2 text-sm font-medium text-muted-foreground">Jornada {week}</p>
-            <div className="flex flex-col gap-3">
-              {weekMatches.map((m) => (
-                <ResultRow key={m.id} roomId={roomId} match={m} />
-              ))}
-            </div>
-          </div>
+          <AdminWeekSection
+            key={week}
+            week={week}
+            weekMatches={weekMatches}
+            roomId={roomId}
+          />
         ))}
       </div>
     </section>
+  )
+}
+
+function AdminWeekSection({
+  week,
+  weekMatches,
+  roomId,
+}: {
+  week: number
+  weekMatches: MatchWithPrediction[]
+  roomId: number
+}) {
+  const [isOpen, setIsOpen] = useState(true)
+
+  return (
+    <div className="border-b border-border/60 pb-4 last:border-0 last:pb-0">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="mb-2 flex items-center justify-between w-full text-left text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors py-1 rounded-lg outline-none"
+      >
+        <span className="flex items-center gap-2">
+          <CalendarDays className="h-4 w-4 text-primary" /> Jornada {week}
+        </span>
+        <span className="text-xs font-normal text-muted-foreground/80 flex items-center gap-1 select-none">
+          {weekMatches.length} {weekMatches.length === 1 ? "partido" : "partidos"}
+          {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </span>
+      </button>
+
+      {isOpen && (
+        <div className="flex flex-col gap-3 animate-in fade-in slide-in-from-top-1 duration-200">
+          {weekMatches.map((m) => (
+            <ResultRow key={m.id} roomId={roomId} match={m} />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 

@@ -27,10 +27,6 @@ export function MatchList({
       map.set(m.week, arr)
     }
 
-    if (isAdmin) {
-      return Array.from(map.entries()).sort((a, b) => b[0] - a[0])
-    }
-
     const now = new Date().getTime()
     const fiveDaysInMs = 5 * 24 * 60 * 60 * 1000
 
@@ -50,8 +46,8 @@ export function MatchList({
       return true
     })
 
-    return filtered.sort((a, b) => b[0] - a[0])
-  }, [matches, isAdmin])
+    return filtered.sort((a, b) => a[0] - b[0])
+  }, [matches])
 
   if (matches.length === 0) {
     return (
