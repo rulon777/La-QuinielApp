@@ -285,7 +285,7 @@ export async function savePrediction(
   awayScore: number,
 ): Promise<{ ok: boolean; error?: string }> {
   const user = await getUser()
-  await requireMembership(roomId, user.id)
+  const { isAdmin } = await requireMembership(roomId, user.id)
   if (!Number.isInteger(homeScore) || !Number.isInteger(awayScore) || homeScore < 0 || awayScore < 0) {
     return { ok: false, error: "El marcador no es válido." }
   }
@@ -297,22 +297,24 @@ export async function savePrediction(
     .limit(1)
   if (!m) return { ok: false, error: "El partido no existe." }
 
-  // Enforce 4-day visibility rule for predictions
-  const weekMatches = await db
-    .select({ startTime: match.startTime })
-    .from(match)
-    .where(eq(match.week, m.week))
-  
-  const startTimes = weekMatches
-    .map((wm) => (wm.startTime ? new Date(wm.startTime).getTime() : null))
-    .filter((t): t is number => t !== null)
+  // Enforce 5-day visibility rule for predictions if not admin and not Week 1
+  if (!isAdmin && m.week !== 1) {
+    const weekMatches = await db
+      .select({ startTime: match.startTime })
+      .from(match)
+      .where(eq(match.week, m.week))
+    
+    const startTimes = weekMatches
+      .map((wm) => (wm.startTime ? new Date(wm.startTime).getTime() : null))
+      .filter((t): t is number => t !== null)
 
-  if (startTimes.length > 0) {
-    const earliestStart = Math.min(...startTimes)
-    const now = new Date()
-    const fourDaysInMs = 4 * 24 * 60 * 60 * 1000
-    if (earliestStart - now.getTime() > fourDaysInMs) {
-      return { ok: false, error: "Esta jornada aún no está abierta para pronósticos." }
+    if (startTimes.length > 0) {
+      const earliestStart = Math.min(...startTimes)
+      const now = new Date()
+      const fiveDaysInMs = 5 * 24 * 60 * 60 * 1000
+      if (earliestStart - now.getTime() > fiveDaysInMs) {
+        return { ok: false, error: "Esta jornada aún no está abierta para pronósticos." }
+      }
     }
   }
 

@@ -27,23 +27,31 @@ export function MatchList({
       map.set(m.week, arr)
     }
 
-    const now = new Date().getTime()
-    const fourDaysInMs = 4 * 24 * 60 * 60 * 1000
+    if (isAdmin) {
+      return Array.from(map.entries()).sort((a, b) => b[0] - a[0])
+    }
 
-    const filtered = Array.from(map.entries()).filter(([_, weekMatches]) => {
+    const now = new Date().getTime()
+    const fiveDaysInMs = 5 * 24 * 60 * 60 * 1000
+
+    const filtered = Array.from(map.entries()).filter(([week, weekMatches]) => {
+      // Exception: Week 1 is always visible
+      if (week === 1) return true
+
       const startTimes = weekMatches
         .map((m) => (m.startTime ? new Date(m.startTime).getTime() : null))
         .filter((t): t is number => t !== null)
 
       if (startTimes.length > 0) {
         const earliestStart = Math.min(...startTimes)
-        return (earliestStart - now) <= fourDaysInMs
+        // Show if time to start is <= 5 days or already started
+        return (earliestStart - now) <= fiveDaysInMs
       }
       return true
     })
 
     return filtered.sort((a, b) => b[0] - a[0])
-  }, [matches])
+  }, [matches, isAdmin])
 
   if (matches.length === 0) {
     return (
