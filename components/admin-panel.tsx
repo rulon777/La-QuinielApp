@@ -6,8 +6,44 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { addMatch, deleteMatch, setMatchResult, type MatchWithPrediction } from "@/app/actions/room"
-import { Plus, Trash2, Flag, CalendarDays, ChevronDown, ChevronRight } from "lucide-react"
+import {
+  addMatch,
+  deleteMatch,
+  setMatchResult,
+  getRoomMembersForAdmin,
+  adjustMemberPoints,
+  expelMember,
+  getBannedMembers,
+  unbanMember,
+  type MatchWithPrediction,
+  type RoomMemberAdminInfo,
+  type BannedMemberInfo,
+} from "@/app/actions/room"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import {
+  Plus,
+  Trash2,
+  Flag,
+  CalendarDays,
+  ChevronDown,
+  ChevronRight,
+  Settings,
+  MoreVertical,
+  ArrowLeft,
+  Users,
+  RefreshCw,
+  Ban,
+  UserX,
+  PlusCircle,
+  MinusCircle,
+} from "lucide-react"
 
 export function AdminPanel({
   roomId,
@@ -22,9 +58,426 @@ export function AdminPanel({
 
   return (
     <div className="flex flex-col gap-6">
+      <ManageLeagueSection roomId={roomId} />
       <AddMatchForm roomId={roomId} defaultWeek={nextWeek} />
       <ManageMatches roomId={roomId} matches={matches} />
     </div>
+  )
+}
+
+function ManageLeagueSection({ roomId }: { roomId: number }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [view, setView] = useState<"members" | "banned" | "adjust">("members")
+  const [members, setMembers] = useState<RoomMemberAdminInfo[]>([])
+  const [banned, setBanned] = useState<BannedMemberInfo[]>([])
+  const [loading, setLoading] = useState(false)
+
+  const [selectedMember, setSelectedMember] = useState<RoomMemberAdminInfo | null>(null)
+  const [manualAciertosInput, setManualAciertosInput] = useState("0")
+  const [manualClavadasInput, setManualClavadasInput] = useState("0")
+
+  const [openMenuUserId, setOpenMenuUserId] = useState<string | null>(null)
+  const [actionPending, setActionPending] = useState(false)
+
+  const loadMembers = async () => {
+    setLoading(true)
+    try {
+      const data = await getRoomMembersForAdmin(roomId)
+      setMembers(data)
+    } catch (err) {
+      toast.error("Error al cargar los participantes")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadBanned = async () => {
+    setLoading(true)
+    try {
+      const data = await getBannedMembers(roomId)
+      setBanned(data)
+    } catch (err) {
+      toast.error("Error al cargar participantes expulsados")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open)
+    if (open) {
+      setView("members")
+      setSelectedMember(null)
+      setOpenMenuUserId(null)
+      loadMembers()
+    }
+  }
+
+  const handleExpel = async (targetUserId: string) => {
+    if (confirm("¿Estás seguro de que quieres expulsar a este participante? No podrá volver a ingresar a la liga.")) {
+      setActionPending(true)
+      try {
+        const res = await expelMember(roomId, targetUserId)
+        if (res.ok) {
+          toast.success("Participante expulsado correctamente")
+          loadMembers()
+        } else {
+          toast.error(res.error ?? "No se pudo expulsar al participante")
+        }
+      } catch {
+        toast.error("Error al expulsar al participante")
+      } finally {
+        setActionPending(false)
+        setOpenMenuUserId(null)
+      }
+    }
+  }
+
+  const handleUnban = async (targetUserId: string) => {
+    setActionPending(true)
+    try {
+      const res = await unbanMember(roomId, targetUserId)
+      if (res.ok) {
+        toast.success("Veto revocado correctamente")
+        loadBanned()
+      } else {
+        toast.error(res.error ?? "No se pudo revocar el veto")
+      }
+    } catch {
+      toast.error("Error al revocar el veto")
+    } finally {
+      setActionPending(false)
+    }
+  }
+
+  const handleSaveAdjustment = async () => {
+    if (!selectedMember) return
+    const aciertos = Number(manualAciertosInput)
+    const clavadas = Number(manualClavadasInput)
+    if (isNaN(aciertos) || isNaN(clavadas)) {
+      toast.error("Por favor ingresa valores válidos")
+      return
+    }
+
+    setActionPending(true)
+    try {
+      const res = await adjustMemberPoints(roomId, selectedMember.userId, aciertos, clavadas)
+      if (res.ok) {
+        toast.success("Puntos ajustados correctamente")
+        setView("members")
+        loadMembers()
+      } else {
+        toast.error(res.error ?? "No se pudo guardar el ajuste")
+      }
+    } catch {
+      toast.error("Error al ajustar puntos")
+    } finally {
+      setActionPending(false)
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-card-foreground">Gestión de la Liga</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Expulsa participantes o ajusta sus puntos manuales.</p>
+        </div>
+        <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+          <DialogTrigger render={<Button className="font-semibold flex items-center gap-1.5 shrink-0" variant="outline" />}>
+            <Settings className="h-4 w-4" /> Administrar liga
+          </DialogTrigger>
+          <DialogContent className="max-w-md w-full max-h-[85vh] flex flex-col p-6">
+            {view === "members" && (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5 text-primary" /> Participantes de la liga
+                  </DialogTitle>
+                  <DialogDescription>
+                    Administra a los usuarios que participan en esta quiniela.
+                  </DialogDescription>
+                </DialogHeader>
+
+                {loading ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
+                    <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+                    <span className="text-sm">Cargando participantes...</span>
+                  </div>
+                ) : members.length === 0 ? (
+                  <div className="py-8 text-center text-sm text-muted-foreground">
+                    No hay participantes en la liga.
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto pr-1 my-4 flex flex-col gap-2 max-h-[40vh]">
+                    {members.map((m) => (
+                      <div
+                        key={m.userId}
+                        className="flex items-center justify-between rounded-xl border border-border/80 bg-accent/20 px-4 py-3 transition-colors hover:bg-accent/40 relative"
+                      >
+                        <span className="text-sm font-semibold text-foreground truncate max-w-[70%]">
+                          {m.userName}
+                        </span>
+                        <div className="relative shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => setOpenMenuUserId(openMenuUserId === m.userId ? null : m.userId)}
+                          >
+                            <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                          {openMenuUserId === m.userId && (
+                            <>
+                              <div className="fixed inset-0 z-40" onClick={() => setOpenMenuUserId(null)} />
+                              <div className="absolute right-0 mt-1 z-50 w-44 rounded-xl border border-border/60 bg-popover p-1 shadow-lg select-none">
+                                <button
+                                  onClick={() => {
+                                    setSelectedMember(m)
+                                    setManualAciertosInput(String(m.manualAciertos))
+                                    setManualClavadasInput(String(m.manualClavadas))
+                                    setOpenMenuUserId(null)
+                                    setView("adjust")
+                                  }}
+                                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-foreground hover:bg-accent hover:text-accent-foreground transition-colors cursor-pointer"
+                                >
+                                  <Settings className="h-3.5 w-3.5 text-muted-foreground" /> Ajustar puntos
+                                </button>
+                                <button
+                                  onClick={() => handleExpel(m.userId)}
+                                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                                  disabled={actionPending}
+                                >
+                                  <UserX className="h-3.5 w-3.5" /> Expulsar de la liga
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mt-4 flex flex-col gap-2">
+                  <Button
+                    variant="destructive"
+                    className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold flex items-center justify-center gap-2"
+                    onClick={() => {
+                      setView("banned")
+                      loadBanned()
+                    }}
+                  >
+                    <Ban className="h-4 w-4" /> Participantes expulsados
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {view === "banned" && (
+              <>
+                <DialogHeader>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 -ml-2"
+                      onClick={() => {
+                        setView("members")
+                        loadMembers()
+                      }}
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    <DialogTitle className="flex items-center gap-2 text-red-600 font-bold">
+                      <Ban className="h-5 w-5" /> Participantes expulsados
+                    </DialogTitle>
+                  </div>
+                  <DialogDescription>
+                    Listado de participantes vetados. No podrán volver a entrar a la liga.
+                  </DialogDescription>
+                </DialogHeader>
+
+                {loading ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
+                    <RefreshCw className="h-8 w-8 animate-spin text-red-500" />
+                    <span className="text-sm">Cargando expulsados...</span>
+                  </div>
+                ) : banned.length === 0 ? (
+                  <div className="py-12 text-center text-sm font-semibold text-muted-foreground bg-accent/10 rounded-xl border border-dashed border-border/80 my-4">
+                    Aún no se ha expulsado ningún participante.
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto pr-1 my-4 flex flex-col gap-2 max-h-[40vh]">
+                    {banned.map((b) => (
+                      <div
+                        key={b.userId}
+                        className="flex items-center justify-between rounded-xl border border-border/80 bg-red-500/5 px-4 py-3 transition-colors hover:bg-red-500/10"
+                      >
+                        <span className="text-sm font-semibold text-foreground truncate max-w-[65%]">
+                          {b.userName}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs font-semibold text-primary border-primary/30 hover:bg-primary/10 shrink-0"
+                          onClick={() => handleUnban(b.userId)}
+                          disabled={actionPending}
+                        >
+                          Quitar veto
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <Button
+                  variant="secondary"
+                  className="w-full font-semibold"
+                  onClick={() => {
+                    setView("members")
+                    loadMembers()
+                  }}
+                >
+                  Volver
+                </Button>
+              </>
+            )}
+
+            {view === "adjust" && selectedMember && (
+              <>
+                <DialogHeader>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 -ml-2"
+                      onClick={() => setView("members")}
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    <DialogTitle className="flex items-center gap-2">
+                      Ajustar puntos de {selectedMember.userName}
+                    </DialogTitle>
+                  </div>
+                  <DialogDescription>
+                    Modifica la cantidad de aciertos y clavadas del usuario para alterar sus puntos finales.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="flex flex-col gap-4 my-4">
+                  <div className="rounded-xl border border-border/60 bg-muted/30 p-3.5 space-y-2.5">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-muted-foreground font-semibold">Pronósticos conseguidos:</span>
+                      <span className="font-semibold text-foreground">
+                        {selectedMember.calculatedAciertos} aciertos, {selectedMember.calculatedClavadas} clavadas
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs border-t border-border/40 pt-2.5">
+                      <span className="text-muted-foreground font-semibold">Proyección de puntos final:</span>
+                      <span className="font-bold text-primary text-sm">
+                        {((selectedMember.calculatedAciertos + Number(manualAciertosInput || 0)) * 2) +
+                          ((selectedMember.calculatedClavadas + Number(manualClavadasInput || 0)) * 4)}{" "}
+                        puntos
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground italic text-center">
+                      Fórmula: (Aciertos * 2 pts) + (Clavadas * 4 pts)
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="manualAciertos" className="font-semibold text-xs text-foreground">
+                        Ajuste de Aciertos (pueden ser negativos)
+                      </Label>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9"
+                          onClick={() => setManualAciertosInput(String(Number(manualAciertosInput || 0) - 1))}
+                        >
+                          <MinusCircle className="h-4 w-4" />
+                        </Button>
+                        <Input
+                          id="manualAciertos"
+                          type="number"
+                          className="text-center font-bold text-base h-9"
+                          value={manualAciertosInput}
+                          onChange={(e) => setManualAciertosInput(e.target.value)}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9"
+                          onClick={() => setManualAciertosInput(String(Number(manualAciertosInput || 0) + 1))}
+                        >
+                          <PlusCircle className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="manualClavadas" className="font-semibold text-xs text-foreground">
+                        Ajuste de Clavadas (pueden ser negativos)
+                      </Label>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9"
+                          onClick={() => setManualClavadasInput(String(Number(manualClavadasInput || 0) - 1))}
+                        >
+                          <MinusCircle className="h-4 w-4" />
+                        </Button>
+                        <Input
+                          id="manualClavadas"
+                          type="number"
+                          className="text-center font-bold text-base h-9"
+                          value={manualClavadasInput}
+                          onChange={(e) => setManualClavadasInput(e.target.value)}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9"
+                          onClick={() => setManualClavadasInput(String(Number(manualClavadasInput || 0) + 1))}
+                        >
+                          <PlusCircle className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    className="font-semibold"
+                    onClick={() => setView("members")}
+                    disabled={actionPending}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    className="font-semibold"
+                    onClick={handleSaveAdjustment}
+                    disabled={actionPending}
+                  >
+                    {actionPending ? "Guardando..." : "Guardar"}
+                  </Button>
+                </div>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+      </div>
+    </section>
   )
 }
 

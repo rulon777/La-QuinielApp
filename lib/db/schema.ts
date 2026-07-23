@@ -71,6 +71,17 @@ export const roomMember = pgTable("room_member", {
   userId: text("userId").notNull(),
   userName: text("userName").notNull(),
   joinedAt: timestamp("joinedAt").notNull().defaultNow(),
+  manualAciertos: integer("manualAciertos").notNull().default(0),
+  manualClavadas: integer("manualClavadas").notNull().default(0),
+})
+
+// Banned members in a room.
+export const roomBanned = pgTable("room_banned", {
+  id: serial("id").primaryKey(),
+  roomId: integer("roomId").notNull(),
+  userId: text("userId").notNull(),
+  userName: text("userName").notNull(),
+  bannedAt: timestamp("bannedAt").notNull().defaultNow(),
 })
 
 // A match added by the admin for a given week.

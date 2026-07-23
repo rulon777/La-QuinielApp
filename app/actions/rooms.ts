@@ -2,7 +2,7 @@
 
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { room, roomMember } from "@/lib/db/schema"
+import { room, roomMember, roomBanned } from "@/lib/db/schema"
 import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
@@ -87,6 +87,17 @@ export async function joinRoom(code: string): Promise<{ ok: boolean; error?: str
 
   const [found] = await db.select().from(room).where(eq(room.code, normalized)).limit(1)
   if (!found) return { ok: false, error: "No existe ninguna sala con ese código." }
+
+  // Verificar si el usuario está expulsado
+  const [isBanned] = await db
+    .select()
+    .from(roomBanned)
+    .where(and(eq(roomBanned.roomId, found.id), eq(roomBanned.userId, user.id)))
+    .limit(1)
+
+  if (isBanned) {
+    return { ok: false, error: "Has sido expulsado de esta liga por el admin." }
+  }
 
   const existing = await db
     .select({ id: roomMember.id })

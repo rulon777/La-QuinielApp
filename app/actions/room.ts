@@ -2,7 +2,7 @@
 
 import { auth } from "@/lib/auth"
 import { db } from "@/lib/db"
-import { room, roomMember, match, prediction } from "@/lib/db/schema"
+import { room, roomMember, match, prediction, roomBanned } from "@/lib/db/schema"
 import { and, asc, desc, eq } from "drizzle-orm"
 import { headers } from "next/headers"
 import { revalidatePath } from "next/cache"
@@ -132,14 +132,27 @@ export async function getRoomData(roomId: number): Promise<RoomData> {
   }
 
   const currentLeaderboard = members
-    .map((m) => ({
-      userId: m.userId,
-      userName: m.userName,
-      points: pointsByUser.get(m.userId) ?? 0,
-      clavadas: clavadasByUser.get(m.userId) ?? 0,
-      aciertos: aciertosByUser.get(m.userId) ?? 0,
-      isAdmin: m.userId === r.adminId,
-    }))
+    .map((m) => {
+      const calculatedPoints = pointsByUser.get(m.userId) ?? 0
+      const calculatedClavadas = clavadasByUser.get(m.userId) ?? 0
+      const calculatedAciertos = aciertosByUser.get(m.userId) ?? 0
+
+      const manualA = m.manualAciertos ?? 0
+      const manualC = m.manualClavadas ?? 0
+
+      const totalAciertos = calculatedAciertos + manualA
+      const totalClavadas = calculatedClavadas + manualC
+      const totalPoints = totalAciertos * 2 + totalClavadas * 4
+
+      return {
+        userId: m.userId,
+        userName: m.userName,
+        points: totalPoints,
+        clavadas: totalClavadas,
+        aciertos: totalAciertos,
+        isAdmin: m.userId === r.adminId,
+      }
+    })
     .sort((a, b) => b.points - a.points || b.clavadas - a.clavadas || a.userName.localeCompare(b.userName))
 
   let prevLeaderboard: typeof currentLeaderboard = []
@@ -147,24 +160,40 @@ export async function getRoomData(roomId: number): Promise<RoomData> {
   if (hasPrevWeek) {
     const prevPointsByUser = new Map<string, number>()
     const prevClavadasByUser = new Map<string, number>()
+    const prevAciertosByUser = new Map<string, number>()
     for (const p of allPredictions) {
       const w = matchWeekMap.get(p.matchId) ?? 0
       if (w < maxWeek) {
         prevPointsByUser.set(p.userId, (prevPointsByUser.get(p.userId) ?? 0) + p.points)
         if (p.points === 4) {
           prevClavadasByUser.set(p.userId, (prevClavadasByUser.get(p.userId) ?? 0) + 1)
+        } else if (p.points === 2) {
+          prevAciertosByUser.set(p.userId, (prevAciertosByUser.get(p.userId) ?? 0) + 1)
         }
       }
     }
     prevLeaderboard = members
-      .map((m) => ({
-        userId: m.userId,
-        userName: m.userName,
-        points: prevPointsByUser.get(m.userId) ?? 0,
-        clavadas: prevClavadasByUser.get(m.userId) ?? 0,
-        aciertos: 0,
-        isAdmin: m.userId === r.adminId,
-      }))
+      .map((m) => {
+        const calculatedPoints = prevPointsByUser.get(m.userId) ?? 0
+        const calculatedClavadas = prevClavadasByUser.get(m.userId) ?? 0
+        const calculatedAciertos = prevAciertosByUser.get(m.userId) ?? 0
+
+        const manualA = m.manualAciertos ?? 0
+        const manualC = m.manualClavadas ?? 0
+
+        const totalAciertos = calculatedAciertos + manualA
+        const totalClavadas = calculatedClavadas + manualC
+        const totalPoints = totalAciertos * 2 + totalClavadas * 4
+
+        return {
+          userId: m.userId,
+          userName: m.userName,
+          points: totalPoints,
+          clavadas: totalClavadas,
+          aciertos: totalAciertos,
+          isAdmin: m.userId === r.adminId,
+        }
+      })
       .sort((a, b) => b.points - a.points || b.clavadas - a.clavadas || a.userName.localeCompare(b.userName))
   }
 
@@ -352,3 +381,166 @@ export async function savePrediction(
   revalidatePath(`/room/${roomId}`)
   return { ok: true }
 }
+
+export type RoomMemberAdminInfo = {
+  userId: string
+  userName: string
+  manualAciertos: number
+  manualClavadas: number
+  calculatedAciertos: number
+  calculatedClavadas: number
+}
+
+export async function getRoomMembersForAdmin(roomId: number): Promise<RoomMemberAdminInfo[]> {
+  const user = await getUser()
+  const { isAdmin } = await requireMembership(roomId, user.id)
+  if (!isAdmin) throw new Error("Solo el admin puede ver los miembros para administración.")
+
+  const members = await db
+    .select()
+    .from(roomMember)
+    .where(eq(roomMember.roomId, roomId))
+    .orderBy(asc(roomMember.userName))
+
+  const allPredictions = await db
+    .select()
+    .from(prediction)
+    .where(eq(prediction.roomId, roomId))
+
+  const clavadasByUser = new Map<string, number>()
+  const aciertosByUser = new Map<string, number>()
+  for (const p of allPredictions) {
+    if (p.points === 4) {
+      clavadasByUser.set(p.userId, (clavadasByUser.get(p.userId) ?? 0) + 1)
+    } else if (p.points === 2) {
+      aciertosByUser.set(p.userId, (aciertosByUser.get(p.userId) ?? 0) + 1)
+    }
+  }
+
+  return members.map((m) => ({
+    userId: m.userId,
+    userName: m.userName,
+    manualAciertos: m.manualAciertos,
+    manualClavadas: m.manualClavadas,
+    calculatedAciertos: aciertosByUser.get(m.userId) ?? 0,
+    calculatedClavadas: clavadasByUser.get(m.userId) ?? 0,
+  }))
+}
+
+export async function adjustMemberPoints(
+  roomId: number,
+  targetUserId: string,
+  manualAciertos: number,
+  manualClavadas: number,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const user = await getUser()
+    const { isAdmin } = await requireMembership(roomId, user.id)
+    if (!isAdmin) return { ok: false, error: "Solo el admin puede ajustar puntos." }
+
+    if (!Number.isInteger(manualAciertos) || !Number.isInteger(manualClavadas)) {
+      return { ok: false, error: "Los valores deben ser números enteros." }
+    }
+
+    await db
+      .update(roomMember)
+      .set({ manualAciertos, manualClavadas })
+      .where(and(eq(roomMember.roomId, roomId), eq(roomMember.userId, targetUserId)))
+
+    revalidatePath(`/room/${roomId}`)
+    return { ok: true }
+  } catch (err: any) {
+    return { ok: false, error: err.message ?? "Error al ajustar puntos." }
+  }
+}
+
+export async function expelMember(
+  roomId: number,
+  targetUserId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const user = await getUser()
+    const { room: r, isAdmin } = await requireMembership(roomId, user.id)
+    if (!isAdmin) return { ok: false, error: "Solo el admin puede expulsar participantes." }
+    if (r.adminId === targetUserId) {
+      return { ok: false, error: "No puedes expulsar al creador/admin de la sala." }
+    }
+
+    // Obtener datos del miembro antes de borrarlo
+    const [member] = await db
+      .select()
+      .from(roomMember)
+      .where(and(eq(roomMember.roomId, roomId), eq(roomMember.userId, targetUserId)))
+      .limit(1)
+
+    if (!member) {
+      return { ok: false, error: "El participante no pertenece a esta sala." }
+    }
+
+    // Guardar en roomBanned
+    await db.insert(roomBanned).values({
+      roomId,
+      userId: targetUserId,
+      userName: member.userName,
+    })
+
+    // Eliminar de roomMember
+    await db
+      .delete(roomMember)
+      .where(and(eq(roomMember.roomId, roomId), eq(roomMember.userId, targetUserId)))
+
+    revalidatePath(`/room/${roomId}`)
+    return { ok: true }
+  } catch (err: any) {
+    return { ok: false, error: err.message ?? "Error al expulsar al participante." }
+  }
+}
+
+export type BannedMemberInfo = {
+  id: number
+  roomId: number
+  userId: string
+  userName: string
+  bannedAt: string
+}
+
+export async function getBannedMembers(roomId: number): Promise<BannedMemberInfo[]> {
+  const user = await getUser()
+  const { isAdmin } = await requireMembership(roomId, user.id)
+  if (!isAdmin) throw new Error("Solo el admin puede ver la lista de expulsados.")
+
+  const list = await db
+    .select()
+    .from(roomBanned)
+    .where(eq(roomBanned.roomId, roomId))
+    .orderBy(asc(roomBanned.userName))
+
+  return list.map((b) => ({
+    id: b.id,
+    roomId: b.roomId,
+    userId: b.userId,
+    userName: b.userName,
+    bannedAt: b.bannedAt.toISOString(),
+  }))
+}
+
+export async function unbanMember(
+  roomId: number,
+  targetUserId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const user = await getUser()
+    const { isAdmin } = await requireMembership(roomId, user.id)
+    if (!isAdmin) return { ok: false, error: "Solo el admin puede quitar el veto." }
+
+    await db
+      .delete(roomBanned)
+      .where(and(eq(roomBanned.roomId, roomId), eq(roomBanned.userId, targetUserId)))
+
+    revalidatePath(`/room/${roomId}`)
+    return { ok: true }
+  } catch (err: any) {
+    return { ok: false, error: err.message ?? "Error al quitar el veto." }
+  }
+}
+
